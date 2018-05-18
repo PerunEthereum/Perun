@@ -59,6 +59,8 @@ contract LedgerChannel {
     LCStatus public status;
     ILibSignatures libSignatures;
 
+    bytes initialSigB;
+
     function LedgerChannel(address addressBob, uint lcId, ILibSignatures libSignaturesAddress) public payable {
         alice.id = msg.sender;
         alice.cash = msg.value;
@@ -71,10 +73,14 @@ contract LedgerChannel {
         EventLCOpening(id);
     }
 
-    function LCOpen() public payable {
+    function LCOpen(bytes sigB) public payable {
         require(msg.sender == bob.id && status == LCStatus.Init);
 
         bob.cash = msg.value;
+        bytes32 msgHash = keccak256(id, alice.id, alice.cash, bob.id, bob.cash, 0);
+        require(libSignatures.verify(bob.id, msgHash, sigB));
+        initialSigB = sigB;
+        
         status = LCStatus.Open;
         timeout = 0;
         EventLCOpened();
