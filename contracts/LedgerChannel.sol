@@ -80,7 +80,7 @@ contract LedgerChannel {
         bytes32 msgHash = keccak256(id, alice.id, alice.cash, bob.id, bob.cash, 0);
         require(libSignatures.verify(bob.id, msgHash, sigB));
         initialSigB = sigB;
-        
+
         status = LCStatus.Open;
         timeout = 0;
         EventLCOpened();
@@ -217,6 +217,7 @@ contract LedgerChannel {
                                            (status == LCStatus.ClosingByBob && msg.sender == alice.id));
         bytes32 msgHash = keccak256(id, alice.id, cash1, bob.id, cash2, version);
         require(libSignatures.verify(Other(msg.sender, alice.id, bob.id), msgHash, sig));
+        require(alice.cash + bob.cash >= cash1 + cash2);
         if (status == LCStatus.Open) {
             lastVersion = version;
             lastCash1 = cash1;
