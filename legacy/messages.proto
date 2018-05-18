@@ -1,0 +1,13 @@
+syntax = "proto3";
+
+package perun;
+
+// all string types correspond to uint256
+message StateUpdate {
+    uint64 state_id = 1;
+    string version = 2;
+    string aliceCash = 3;
+    string bobCash = 4;
+    bytes sigA = 5;
+    bytes sigB = 6;
+}

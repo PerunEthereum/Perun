@@ -1,0 +1,161 @@
+// All uint256 and address types are encoded as strings
+syntax = "proto3";
+
+import "./common_types.proto";
+
+package Perun;
+
+service Perun {
+    // ==================================================================
+    // General
+    // ==================================================================
+    // get all channels registered
+    rpc getChannels() returns (ChannelResponse) {}
+
+    // subscribe to updates for new channels created for my address
+    // should return all allready registered channels first
+
+    // Subscribe to updates for newly created channels for this address 
+    // (i.e. newly created channels by a different party). This function
+    // should only return newly created channels.
+    rpc receiveUpdates() returns (stream Channel) {}
+
+    rpc setLibSigAddress(Address) returns (GenericResponse) {}
+
+    rpc setVPCAddress(Address) returns (GenericResponse) {}
+
+    rpc setOwnAddress(Address) returns (GenericResponse) {}
+
+    // ==================================================================
+    // Setting Up MultiStateContract (MSContract) 
+    // ==================================================================
+
+    // create a new MSContract
+    rpc createNewMSChannel(NewChannelRequest) returns (NewChannelResponse) {}
+
+    // Confirms a channel to another party, this must happen before 
+    // the timout of the channel is reached. 
+    // Essentially all updates to the channel are received through this channel
+    // since grpc does not enforce the presence of fields, only updated fields
+    // should be submitted every time
+    //
+    // From here on out, ChannelId is assmued to correspond to the Multi State Channel
+    rpc confirmChannel(ChannelId, Amount) returns (stream Channel) {}
+
+    // This function is used when the stream created by confirmChannel is dropped for
+    // any reason. Must return all updates to this channel.
+    rpc subscribeToChannel(ChannelId) returns (stream Channel) {}
+
+    // This funcion is used if only one party confirms a channel. Can only 
+    // be called after the initial timeout is reached. Closes the update stream
+    rpc refundChannel(ChannelId) returns (GenericResponse) {}
+
+    
+    // ==================================================================
+    // Creating Virtual Payment Channel
+    // ==================================================================
+
+    // This function is used to propose an initial state for a virtual payment contract 
+    // (sid, blockedA, blockedB, version). Sid must be cryptographically sound randomly
+    // chosen (i.e. SHA3(addrAlice, addrBob, nonce)). The state must be signed by the participant.
+    //
+    // The corresponding party receives an update over their update channel generated in 
+    // the confirmChannel call.
+    // 
+    // When the corresponding party responds in an appropriate time frame, success is returned
+    rpc proposeVPC(ProposeInitialState) returns (ProposedVPCResponse) {}
+
+    // Used for responding to an initial state proposal, reuse same messages, just also sign on
+    // your end
+    rpc confirmProposedVPC(ProposeInitialState) returns(ProposedVPCResponse) {}
+
+    // This function is used to create a virtual payment channel and registered the first state, 
+    // generated with the proposeVPC functionallity, with the blockchain. This will trigger a 
+    // channel update event for the subscription generated in the confirm call. Both participants
+    // use this function
+    rpc stateRegister(ChannelId, ChannelState) returns (GenericResponse) {}
+
+    // This function is used when one party did not confirm to the channel
+    rpc finalizeRegister(ChannelId) returns (GenericResponse) {}
+
+
+    // ==================================================================
+    // Off-Chain Communication
+    // ==================================================================
+    // Propose a mew state to the corresponding party. This function is used
+    // when a party wants to propose a new state. Only one Signature field must be
+    // filled in. This will trigger a state update event for the subscription generated 
+    // in the confirm call.
+    rpc proposeNewChannelState(ChannelId, ChannelState) returns (ProposeNewChannelStateResponse) {}
+
+    // After examining a state, this function is used to confirm to the new channel state.
+    // Both signature fields need to be filled in. This will return the proposeNewChannelState call
+    // from the corresponding party
+    rpc respondNewChannelState(ChannelId, ProposeNewChannelStateResponse) returns (GenericResponse) {}
+
+
+    // ==================================================================
+    // Closing Virtual Payment Channel
+    // ==================================================================
+    // This function is used when one party wants to close the channel. This
+    // function calls the `close` function of the VPC. This function is also used
+    // when a party wants to register a higher VPC version or confirm the close with
+    // the same state.
+    rpc closeVirtualChannel(ChannelId, ChannelState) returns (GenericResponse) {}
+
+    // After settling the state with the VPC contract, delete the entire channel.
+    // This function calls the `execute` function of the MSContract.
+    rpc executeCloseVirtualChannel(ChannelId) returns (GenericResponse) {}
+
+
+    // ==================================================================
+    // Close MultiStateContract
+    // ==================================================================
+    // This function is used when one party wants to close the multi state channel. This
+    // is only possible when there is no internal contract present. This function
+    // calls the `close`functionallity of the MSContract.
+    rpc closeMSContract(ChannelId) returns (GenericResponse) {}
+
+    // This function is used when one party did not respond to the close call and
+    // the timeout ran out. This function calls the `close`functionallity of the MSContract.
+    rpc finalizeCloseMSContract(ChannelId) returns (GenericResponse) {}
+
+}
+
+// generic response for API calls
+message GenericResponse {
+    bool success = 1;
+    string method = 2;
+    string error = 3;
+}
+
+// message for creating a new channel
+message NewChannelRequest {
+    Address alice = 1;
+    Address bob = 2;
+}
+
+message NewChannelResponse {
+    GenericResponse resp = 1;
+    Channel chan = 2;
+}
+
+// Response for getChannels
+message ChannelResponse {
+    GenericResponse resp = 1;
+    repeated Channel channels = 2;
+}
+
+// used as answer when the second party responded
+message ProposedVPCResponse {
+    GenericResponse resp = 1;
+    ProposeInitialState state = 2;
+}
+
+// used to respond to proposeNewChannelState, reason field can be used for 
+// stating a reason in the case of an decline
+message ProposeNewChannelStateResponse {
+    GenericResponse resp = 1;
+    ChannelState state = 2;
+    string reason = 3;
+}

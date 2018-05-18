@@ -1,0 +1,113 @@
+// All uint256 and address types are encoded as strings
+syntax = "proto3";
+
+package Perun;
+
+// 40 byte Ethereum address encoded as string
+message Address {
+    string address = 1;
+}
+
+// uint256 amount of Wei encoded as string
+message Amount {
+    string amount = 1;
+}
+
+// Overview of an Party paricipating in MultiStateChannel
+message Party {
+    // Address of the corresponding party
+    Address id = 1; 
+
+    // The amount money of blocked in the channel
+    Amount cash = 2; 
+
+    // waiting for input from this party
+    bool waitForInput = 3; 
+}
+
+// Overview of an virtual payment channel, retrived from the corresponding
+// VPC contract on the blockchain
+message VPC {
+    // Final distribution of alice's funds
+    Amount aliceCash = 1; 
+
+    // Final distribution of bob's funds
+    Amount bobCash = 2; 
+
+    // State id which was registered with the VPC contract
+    string stateId = 3; 
+
+    // Validity timeout in which parties can register channel states
+    string validity = 4; 
+
+    // Final timeout to circumvent blocking the channel for ever
+    string extendedValidity = 5; 
+
+    bool open = 6; 
+    bool waitingForAlice = 7;
+    bool waitingForBob = 8; 
+}
+
+// Channel state also used as update message
+message ChannelState {
+    uint64 state_id = 1;
+    string version = 2;
+    Amount aliceCash = 3;
+    Amount bobCash = 4;
+
+    // when used as an update message only the corresponding
+    // signature fields need to be filled
+    bytes sigA = 5;
+    bytes sigB = 6;
+}
+
+message ProposeInitialState {
+    ChannelState init_state = 1;
+
+    // nonce used for this channel's sid
+    bytes nonce = 2;
+}
+
+message InternalChannel {
+    bool active = 1;
+    VPC vpc = 2;
+    string sid = 3;
+
+    // Amount blocked by participant A
+    Amount blockedA = 4;
+
+    // Amount blocked by participant B
+    Amount blockedB = 5;
+
+    string version = 6;
+}
+
+enum ChannelStatus {
+    INIT = 0;
+    OPEN = 1;
+    IN_CONFLICT = 2;
+    SETTLED = 3;
+    WAITING_TO_CLOSE = 4;
+    READY_TO_CLOSE = 5;
+}
+
+message ChannelId {
+    // uint256
+    string channelId = 1;
+}
+
+// overview for a channel
+message Channel {
+    ChannelId channelId = 1;
+
+    Party alice = 2;
+    Party bob = 3;
+
+    // timeout for the channel uint256
+    string timeout = 4;
+
+    InternalChannel internalContr = 5;
+    ChannelStatus status = 6;
+    ChannelState state = 7;
+    ProposeInitialState state_init = 8;
+}

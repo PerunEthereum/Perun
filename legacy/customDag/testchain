@@ -1,0 +1,17 @@
+#mkdir testchain
+#cd testchain
+#echo CustomGenesis.json
+
+geth --identity "MyNodeName" --rpc --rpcport "8545" --rpccorsdomain "*" --datadir "dataDir" --port "30303" --nodiscover --rpcapi "db,eth,net,web3,personal,admin,contract" --networkid 1999 init CustomGenesis.json
+
+geth --identity "MyNodeName" --rpc --rpcport "8545" --rpccorsdomain "*" --datadir "dataDir" --port "30303" --nodiscover --rpcapi "db,eth,net,web3,personal,admin,contract" --networkid 1999 console
+
+#personal.newAccount("password") //"0x5f1a9a9cd8d80433be1ec753f3c967bd762c844b"
+
+#miner.setEtherbase(personal.listAccounts[0])
+
+#miner.start()
+
+#primary = eth.accounts[0]
+
+#balance = web3.fromWei(eth.getBalance(primary), "ether");

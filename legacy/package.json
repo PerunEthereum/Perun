@@ -1,0 +1,13 @@
+{
+  "name": "perun",
+  "version": "0.0.1",
+  "description": "dwa",
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "ethereumjs-abi": "^0.6.4",
+    "ethereumjs-util": "^5.1.2",
+    "left-pad": "^1.2.0",
+    "web3": "^0.18.4"
+  }
+}
