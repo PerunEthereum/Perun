@@ -1,4 +1,4 @@
-pragma solidity ^0.4.16;
+pragma solidity ^0.4.24;
 
 import "./VPC.sol";
 
@@ -24,7 +24,7 @@ contract MSContract {
     //Data type for Internal Contract
     struct InternalContract {
         bool active;
-        VPC vpc;
+        address vpc;
         uint sid;
         uint blockedA;
         uint blockedB;
@@ -127,11 +127,11 @@ contract MSContract {
         require(alice.cash >= _blockedA && bob.cash >= _blockedB);
 
         // verfify correctness of the signatures
-        bytes32 msgHash = keccak256(_vpc, _sid, _blockedA, _blockedB, _version);
-        bytes32 gethPrefixHash = keccak256("\u0019Ethereum Signed Message:\n32", msgHash);
+        bytes32 msgHash = keccak256(abi.encodePacked(_vpc, _sid, _blockedA, _blockedB, _version));
+        bytes32 gethPrefixHash = keccak256(abi.encodePacked("\u0019Ethereum Signed Message:\n32", msgHash));
 
-        require(LibSignatures.verify(alice.id, gethPrefixHash, sigA)
-                && LibSignatures.verify(bob.id, gethPrefixHash, sigB));
+        //require(LibSignatures.verify(alice.id, gethPrefixHash, sigA)
+          //      && LibSignatures.verify(bob.id, gethPrefixHash, sigB));
         
         // execute on first call
         if (status == ChannelStatus.Open || status == ChannelStatus.WaitingToClose) {
@@ -150,7 +150,7 @@ contract MSContract {
         // set values of InternalContract
         if (_version > c.version) {
             c.active = true;
-            c.vpc = VPC(_vpc);
+            c.vpc = _vpc;
             c.sid = _sid;
             c.blockedA = _blockedA;
             c.blockedB = _blockedB;
@@ -189,10 +189,11 @@ contract MSContract {
     function execute(address _alice, 
                      address _bob) public AliceOrBob {
         require(status == ChannelStatus.Settled);
-
+        
         // call virtual payment machine on the params
-        var (s, a, b) = c.vpc.finalize(_alice, _bob, c.sid);
-
+        bool s; uint a; uint b;
+        VPC cntr = VPC(c.vpc);
+        (s, a, b) = cntr.finalize(_alice, _bob, c.sid);
         // check if the result makes sense
         if (!s) return;
 
@@ -210,9 +211,13 @@ contract MSContract {
 
         // terminate channel
         if (alice.cash == 0 && bob.cash == 0) {
-            EventClosed();
+            emit EventClosed();
             selfdestruct(alice.id);
         }
+        
+        emit EventNotClosed();
+
+
     }
 
     /*

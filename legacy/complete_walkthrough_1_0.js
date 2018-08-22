@@ -1,7 +1,10 @@
 const utils = require('ethereumjs-util');
 const abi = require('ethereumjs-abi');
 
-function generateSignatures(args) {
+let gasUsedTotal = 0;
+let functionCalls = [];
+
+async function generateSignatures(args) {
     let hash = await web3.utils.sha3(args);
     const sigAlice = await web3.eth.sign(hash,aliceAddr);
     const sigBob = await web3.eth.sign(hash,bobAddr);
@@ -42,10 +45,9 @@ function getContract(contractName, libAddress) {
     // compile library first 
     var code = "0x" + fs.readFileSync("build/" + contractName + ".bin");
     var abi = fs.readFileSync("build/" + contractName + ".abi");
-    var contract = web3.eth.contract(JSON.parse(abi));
 
     return {
-        contract: contract,
+        abi: abi,
         code: code
     };
 }
@@ -76,7 +78,7 @@ function deployLibSig(){
 
 
 function deployVPC(libAddress) {
-    var vpc = getContract("VPC", libAddress);
+    var vpc = getContract("VPC", libAddress.options.address);
 
     var contract = new web3.eth.Contract(
         JSON.parse(vpc.abi), 
@@ -100,13 +102,14 @@ function deployVPC(libAddress) {
 }
 
 function deployMSContract(libAddress, vpc) {
-    var msc = getContract("MSContract", libAddress);
+    var msc = getContract("MSContract", libAddress.options.address);
 
     var contract = new web3.eth.Contract(
         JSON.parse(msc.abi), 
         {from: aliceAddr, data: msc.code, gas: '200000000'});
     contract.deploy({
-         data: msc.code
+         data: msc.code,
+         arguments: [aliceAddr, bobAddr ]
      }).send(
         {   from: aliceAddr,
             gas: '2000000'}
@@ -119,18 +122,15 @@ function deployMSContract(libAddress, vpc) {
            }
      }).then(function(newContractInstance){
         console.log('MSContract deployed');
-        deployMSContract(newContractInstance, vpc);
+        runSimulation(newContractInstance,vpc);
     });
 }
 
 function runSimulation(msc, vpc) {
-    var events = msc.allEvents({fromBlock: 0, toBlock: 'latest'});
     var initialized = false;
-
-    // setup MSContract watcher with async callbacks
-    events.watch(function(error, event) {
+    var events = msc.events.allEvents({fromBlock: 0, toBlock: 'latest'},
+        (async function(error, event) {
         if (!error) {
-
             if(event.event == "EventInitializing") {
                 if (!initialized) {
                     initialized = true;
@@ -138,40 +138,39 @@ function runSimulation(msc, vpc) {
                         event.returnValues.addressAlice+" bob: "+
                         event.returnValues.addressBob);
 
-                    resp = upc.methods.confirm();
+                    resp = msc.methods.confirm();
                     snd = await resp.send(
                     {   from: aliceAddr,
                         gas: '2000000',
                         gasPrice: '1',
-                        value: web3.toWei(10, "ether")
+                        value: web3.utils.toWei("10", "ether")
                     }).catch((error) => {console.log(error)});
                     called("confirm_alice", snd.gasUsed);
 
-                    resp = upc.methods.confirm();
+                    resp = msc.methods.confirm();
                     snd = await resp.send(
                     {   from: bobAddr,
                         gas: '2000000',
                         gasPrice: '1',
-                        value: web3.toWei(10, "ether")
+                        value: web3.utils.toWei("10", "ether")
                     }).catch((error) => {console.log(error)});
                     called("confirm_bob", snd.gasUsed);
                 }
             } else if (event.event == "EventInitialized") {
                 console.log("Both Parties confirmed alice put in: "+
-                    web3.fromWei(event.returnValues.cashAlice, "ether")+" bob: "+
-                    web3.fromWei(event.returnValues.cashBob, "ether"));
+                    web3.utils.fromWei(event.returnValues.cashAlice, "ether")+" bob: "+
+                    web3.utils.fromWei(event.returnValues.cashBob, "ether"));
 
                 // we assume both parties have agreed on these parameters here
                 const sid = 10;
-                const blockedAlice = web3.toWei(10, "ether");
-                const blockedBob = web3.toWei(10, "ether");
-                const version = 0;
+                const blockedAlice = web3.utils.toWei("10", "ether");
+                const blockedBob = web3.utils.toWei("10", "ether");
+                const version = 1;
 
-                signatures = generateSignatures(
-                    [vpc.address, sid, blockedAlice, blockedBob, version]);
-
+                signatures = await generateSignatures(
+                    [vpc.options.address, sid, blockedAlice, blockedBob, version]);
                 resp = msc.methods.stateRegister(
-                    vpc.address,
+                    vpc.options.address,
                     sid,
                     blockedAlice,
                     blockedBob,
@@ -192,15 +191,15 @@ function runSimulation(msc, vpc) {
                 // conract in state 'InConflict'
                 // register state for bob
                 const sid = 10; 
-                const blockedAlice = web3.toWei(10, "ether");
-                const blockedBob = web3.toWei(10, "ether");
-                const version = 0;
+                const blockedAlice = web3.utils.toWei("10", "ether");
+                const blockedBob = web3.utils.toWei("10", "ether");
+                const version = 1;
 
-                signatures = generateSignatures(
-                    [vpc.address, sid, blockedAlice, blockedBob, version]);
+                signatures = await generateSignatures(
+                    [vpc.options.address, sid, blockedAlice, blockedBob, version]);
 
                 resp = msc.methods.stateRegister(
-                    vpc.address,
+                    vpc.options.address,
                     sid,
                     blockedAlice,
                     blockedBob,
@@ -223,15 +222,15 @@ function runSimulation(msc, vpc) {
                 // alice interact with the vpc conract to establish a final distribution of funds
                 // assume they shared a lot states offline and arrived at this final state
                 const sid = 10; 
-                const aliceCash = web3.toWei(7, "ether");
-                const bobCash = web3.toWei(13, "ether");
+                const aliceCash = web3.utils.toWei("7", "ether");
+                const bobCash = web3.utils.toWei("13", "ether");
                 const version = 10;
 
                 // id hash as input for next hash
                 const id = await web3.utils.sha3([aliceAddr, bobAddr, sid]);
 
-                signatures = generateSignatures([version, aliceCash, bobCash]);
-
+                signatures = await generateSignatures([version, aliceCash, bobCash]);
+                
                 resp = vpc.methods.close(
                     aliceAddr,
                     bobAddr,
@@ -250,6 +249,7 @@ function runSimulation(msc, vpc) {
 
             } else if (event.event == "EventClosed") {
                 console.log("Multi state channel closed!");
+                overview();
 
             } else {
                 console.log("Unknown Event: "+event.event);
@@ -258,16 +258,13 @@ function runSimulation(msc, vpc) {
             console.log(error);
             process.exit();
         }
-    });
+    }));
 
 
-    var events = vpc.allEvents({fromBlock: 0, toBlock: 'latest'});
-
-
-    // vpc watcher
-    events.watch(function(error, event) {
+    var events = vpc.events.allEvents({fromBlock: 0, toBlock: 'latest'},
+    (async function(error, event) {
         if (!error) {
-
+            console.log(event.event);
             if(event.event == "EventVpcClosing") {
                 console.log("One participant started closing procedure for channel with id: "
                  + event.returnValues._id);
@@ -275,14 +272,14 @@ function runSimulation(msc, vpc) {
                 // other participant closes the channel as well to speed things up
                 // same input so we do not create a conflict
                 const sid = 10; 
-                const aliceCash = web3.toWei(7, "ether");
-                const bobCash = web3.toWei(13, "ether");
+                const aliceCash = web3.utils.toWei("7", "ether");
+                const bobCash = web3.utils.toWei("13", "ether");
                 const version = 10;
 
                 // id hash as input for next hash
                 const id = await web3.utils.sha3([aliceAddr, bobAddr, sid]);
                 
-                signatures = generateSignatures([version, aliceCash, bobCash]);
+                signatures = await generateSignatures([version, aliceCash, bobCash]);
 
                 resp = vpc.methods.close(
                     aliceAddr,
@@ -303,12 +300,13 @@ function runSimulation(msc, vpc) {
             } else if (event.event == "EventVpcClosed") {
                 console.log("Both parties closed the channel: "+event.returnValues._id+
                     " with final distribution of funds:\n"+
-                    web3.fromWei(event.returnValues.cashAlice, "ether")
-                    +" Ether - "+web3.fromWei(event.returnValues.cashBob, "ether")+
+                    web3.utils.fromWei(event.returnValues.cashAlice, "ether")
+                    +" Ether - "+web3.utils.fromWei(event.returnValues.cashBob, "ether")+
                     " Ether");
                 // now alice calls the execute function in MSContract 
                 // to distribute the funds and delete the contract
-                resp = vpc.methods.execute(
+                
+                resp = msc.methods.execute(
                     aliceAddr,
                     bobAddr);
                 snd = await resp.send(
@@ -325,7 +323,7 @@ function runSimulation(msc, vpc) {
             console.log(error);
             process.exit();
         }
-    });
+    }));
 
 }
 
@@ -369,7 +367,7 @@ web3.eth.getAccounts(async function(error, result) {
     await web3.eth.sendTransaction({
         from: aliceAddr, 
         to: bobAddr, 
-        value: web3.utils.toWei("10", "ether"), function(err, transactionHash) {
+        value: web3.utils.toWei("20", "ether"), function(err, transactionHash) {
             if (err)
                 console.log(err);
         }});
@@ -377,7 +375,7 @@ web3.eth.getAccounts(async function(error, result) {
     aliceMoney = await web3.eth.getBalance(aliceAddr);
     bobMoney = await web3.eth.getBalance(bobAddr);
 
-    
+    deployLibSig();
 });
 
 

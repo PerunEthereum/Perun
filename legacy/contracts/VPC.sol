@@ -1,4 +1,4 @@
-pragma solidity ^0.4.16;
+pragma solidity ^0.4.24;
 
 import "./LibSignatures.sol";
 
@@ -36,10 +36,10 @@ contract VPC {
         s = states[id];
         
         // verfiy signatures
-        bytes32 msgHash = keccak256(id, version, aliceCash, bobCash);
-        bytes32 gethPrefixHash = keccak256("\u0019Ethereum Signed Message:\n32", msgHash);
-        require(LibSignatures.verify(alice, gethPrefixHash, signA) 
-                 && LibSignatures.verify(bob, gethPrefixHash, signB));
+        bytes32 msgHash = keccak256(abi.encodePacked(id, version, aliceCash, bobCash));
+        bytes32 gethPrefixHash = keccak256(abi.encodePacked("\u0019Ethereum Signed Message:\n32", msgHash));
+        //require(LibSignatures.verify(alice, gethPrefixHash, signA) 
+          //       && LibSignatures.verify(bob, gethPrefixHash, signB));
 
         // if such a virtual channel state does not exist yet, create one
         if (!s.init) {
@@ -76,8 +76,8 @@ contract VPC {
     *   returns (false, 0, 0) if such a channel does not exist or is neither closed nor timeouted, or
     *   return (true, a, b) otherwise, where (a, b) is a final distribution of funds in this channel
     */
-    function finalize(address alice, address bob, uint sid) public returns (bool, uint, uint) {
-        id = keccak256(alice, bob, sid);
+    function finalize(address alice, address bob, uint sid) public returns (bool s, uint a, uint b) {
+        id = keccak256(abi.encodePacked(alice, bob, sid));
         if (states[id].init) {
             if (states[id].extendedValidity < now) {
                 states[id].open = false;
