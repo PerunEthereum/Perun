@@ -1,0 +1,385 @@
+const utils = require('ethereumjs-util');
+const abi = require('ethereumjs-abi');
+
+function generateSignatures(args) {
+    let hash = await web3.utils.sha3(args);
+    const sigAlice = await web3.eth.sign(hash,aliceAddr);
+    const sigBob = await web3.eth.sign(hash,bobAddr);
+    return {
+        alice: sigAlice,
+        bob: sigBob
+    };
+}
+
+function called(label, gasUsed){
+    gasUsedTotal += gasUsed;
+    var priceWEI = gasUsed * gasPrice;
+    var priceETH = web3.utils.fromWei(String(priceWEI), "ether");
+    var priceUSD = priceETH * 400;
+    functionCalls.push(label + "\t: " + gasUsed + "\t " + priceETH + "\t" + priceUSD);
+}
+
+function overview(){
+    var priceWEI = gasUsedTotal * gasPrice;
+    var priceETH = web3.utils.fromWei(String(priceWEI), "ether");
+    var priceUSD = priceETH * 400;
+    console.log("---------");
+    console.log("Function name \t: gas used \t price in ETH \t price in USD")
+    console.log("Total gas used\t: " + gasUsedTotal + "\t " + priceETH + "\t" + priceUSD);
+    for(let i = 0; i < functionCalls.length; ++i)
+        console.log(functionCalls[i]); "\t"
+    console.log("---------");
+}
+
+// XXX: NOTE THIS USES THE OLD web3.js 0.18.0 version, not the 1.0 API
+function getContract(contractName, libAddress) {
+    if (typeof libAddress !== 'undefined') {
+        exec('solc --bin --abi --optimize --overwrite -o build/ --libraries LibSignatures:'+libAddress+' contracts/'+contractName+'.sol');
+    } else {
+        exec('solc --bin --abi --optimize --overwrite -o build/ contracts/'+contractName+'.sol');
+    }
+
+    // compile library first 
+    var code = "0x" + fs.readFileSync("build/" + contractName + ".bin");
+    var abi = fs.readFileSync("build/" + contractName + ".abi");
+    var contract = web3.eth.contract(JSON.parse(abi));
+
+    return {
+        contract: contract,
+        code: code
+    };
+}
+
+function deployLibSig(){
+    var lib = getContract("LibSignatures");
+    var contract = new web3.eth.Contract(
+        JSON.parse(lib.abi), 
+        {from: aliceAddr, data: lib.code, gas: '200000000'});
+    contract.deploy({
+         data: lib.code
+     }).send(
+        {   from: aliceAddr,
+            gas: '2000000'}
+        , function (e, contract){
+           if(e){
+            console.log(e);
+           }
+           if (typeof contract.address !== 'undefined') {
+               console.log('Contract mined! address: ' + contract.address + ' transactionHash: ' + contract.transactionHash);
+               
+           }
+     }).then(function(newContractInstance){
+        console.log('Signature library deployed');
+        deployVPC(newContractInstance);
+    });
+}
+
+
+function deployVPC(libAddress) {
+    var vpc = getContract("VPC", libAddress);
+
+    var contract = new web3.eth.Contract(
+        JSON.parse(vpc.abi), 
+        {from: aliceAddr, data: vpc.code, gas: '200000000'});
+    contract.deploy({
+         data: vpc.code
+     }).send(
+        {   from: aliceAddr,
+            gas: '2000000'}
+        , function (e, contract){
+           if(e){
+            console.log(e);
+           }
+           if (typeof contract.address !== 'undefined') {
+               console.log('Contract mined! address: ' + contract.address + ' transactionHash: ' + contract.transactionHash);
+           }
+     }).then(function(newContractInstance){
+        console.log('VPC deployed');
+        deployMSContract(libAddress, newContractInstance);
+    });
+}
+
+function deployMSContract(libAddress, vpc) {
+    var msc = getContract("MSContract", libAddress);
+
+    var contract = new web3.eth.Contract(
+        JSON.parse(msc.abi), 
+        {from: aliceAddr, data: msc.code, gas: '200000000'});
+    contract.deploy({
+         data: msc.code
+     }).send(
+        {   from: aliceAddr,
+            gas: '2000000'}
+        , function (e, contract){
+           if(e){
+            console.log(e);
+           }
+           if (typeof contract.address !== 'undefined') {
+               console.log('Contract mined! address: ' + contract.address + ' transactionHash: ' + contract.transactionHash);
+           }
+     }).then(function(newContractInstance){
+        console.log('MSContract deployed');
+        deployMSContract(newContractInstance, vpc);
+    });
+}
+
+function runSimulation(msc, vpc) {
+    var events = msc.allEvents({fromBlock: 0, toBlock: 'latest'});
+    var initialized = false;
+
+    // setup MSContract watcher with async callbacks
+    events.watch(function(error, event) {
+        if (!error) {
+
+            if(event.event == "EventInitializing") {
+                if (!initialized) {
+                    initialized = true;
+                    console.log("Channel Initialized for alice: "+
+                        event.returnValues.addressAlice+" bob: "+
+                        event.returnValues.addressBob);
+
+                    resp = upc.methods.confirm();
+                    snd = await resp.send(
+                    {   from: aliceAddr,
+                        gas: '2000000',
+                        gasPrice: '1',
+                        value: web3.toWei(10, "ether")
+                    }).catch((error) => {console.log(error)});
+                    called("confirm_alice", snd.gasUsed);
+
+                    resp = upc.methods.confirm();
+                    snd = await resp.send(
+                    {   from: bobAddr,
+                        gas: '2000000',
+                        gasPrice: '1',
+                        value: web3.toWei(10, "ether")
+                    }).catch((error) => {console.log(error)});
+                    called("confirm_bob", snd.gasUsed);
+                }
+            } else if (event.event == "EventInitialized") {
+                console.log("Both Parties confirmed alice put in: "+
+                    web3.fromWei(event.returnValues.cashAlice, "ether")+" bob: "+
+                    web3.fromWei(event.returnValues.cashBob, "ether"));
+
+                // we assume both parties have agreed on these parameters here
+                const sid = 10;
+                const blockedAlice = web3.toWei(10, "ether");
+                const blockedBob = web3.toWei(10, "ether");
+                const version = 0;
+
+                signatures = generateSignatures(
+                    [vpc.address, sid, blockedAlice, blockedBob, version]);
+
+                resp = msc.methods.stateRegister(
+                    vpc.address,
+                    sid,
+                    blockedAlice,
+                    blockedBob,
+                    version,
+                    signatures.alice,
+                    signatures.bob);
+                snd = await resp.send(
+                {   from: aliceAddr,
+                    gas: '2000000',
+                    gasPrice: '1'
+                }).catch((error) => {console.log(error)});
+                called("stateRegister_alice", snd.gasUsed);
+
+            } else if (event.event == "EventStateRegistering") {
+                console.log("State registered from participant");
+
+                // only Alice registered state 
+                // conract in state 'InConflict'
+                // register state for bob
+                const sid = 10; 
+                const blockedAlice = web3.toWei(10, "ether");
+                const blockedBob = web3.toWei(10, "ether");
+                const version = 0;
+
+                signatures = generateSignatures(
+                    [vpc.address, sid, blockedAlice, blockedBob, version]);
+
+                resp = msc.methods.stateRegister(
+                    vpc.address,
+                    sid,
+                    blockedAlice,
+                    blockedBob,
+                    version,
+                    signatures.alice,
+                    signatures.bob);
+                snd = await resp.send(
+                {   from: bobAddr,
+                    gas: '2000000',
+                    gasPrice: '1'
+                }).catch((error) => {console.log(error)});
+                called("stateRegister_bob", snd.gasUsed);
+
+                
+            } else if (event.event == "EventStateRegistered") {
+                console.log("Both Participants registered their state: "+
+                    event.returnValues.blockedAlice+"-"+event.returnValues.blockedBob);
+
+                // Contract is now in state 'Settled'
+                // alice interact with the vpc conract to establish a final distribution of funds
+                // assume they shared a lot states offline and arrived at this final state
+                const sid = 10; 
+                const aliceCash = web3.toWei(7, "ether");
+                const bobCash = web3.toWei(13, "ether");
+                const version = 10;
+
+                // id hash as input for next hash
+                const id = await web3.utils.sha3([aliceAddr, bobAddr, sid]);
+
+                signatures = generateSignatures([version, aliceCash, bobCash]);
+
+                resp = vpc.methods.close(
+                    aliceAddr,
+                    bobAddr,
+                    sid,
+                    version,
+                    aliceCash,
+                    bobCash,
+                    signatures.alice,
+                    signatures.bob);
+                snd = await resp.send(
+                {   from: aliceAddr,
+                    gas: '2000000',
+                    gasPrice: '1'
+                }).catch((error) => {console.log(error)});
+                called("close_alice", snd.gasUsed);
+
+            } else if (event.event == "EventClosed") {
+                console.log("Multi state channel closed!");
+
+            } else {
+                console.log("Unknown Event: "+event.event);
+            }
+        } else {
+            console.log(error);
+            process.exit();
+        }
+    });
+
+
+    var events = vpc.allEvents({fromBlock: 0, toBlock: 'latest'});
+
+
+    // vpc watcher
+    events.watch(function(error, event) {
+        if (!error) {
+
+            if(event.event == "EventVpcClosing") {
+                console.log("One participant started closing procedure for channel with id: "
+                 + event.returnValues._id);
+
+                // other participant closes the channel as well to speed things up
+                // same input so we do not create a conflict
+                const sid = 10; 
+                const aliceCash = web3.toWei(7, "ether");
+                const bobCash = web3.toWei(13, "ether");
+                const version = 10;
+
+                // id hash as input for next hash
+                const id = await web3.utils.sha3([aliceAddr, bobAddr, sid]);
+                
+                signatures = generateSignatures([version, aliceCash, bobCash]);
+
+                resp = vpc.methods.close(
+                    aliceAddr,
+                    bobAddr,
+                    sid,
+                    version,
+                    aliceCash,
+                    bobCash,
+                    signatures.alice,
+                    signatures.bob);
+                snd = await resp.send(
+                {   from: bobAddr,
+                    gas: '2000000',
+                    gasPrice: '1'
+                }).catch((error) => {console.log(error)});
+                called("close_bob", snd.gasUsed);
+
+            } else if (event.event == "EventVpcClosed") {
+                console.log("Both parties closed the channel: "+event.returnValues._id+
+                    " with final distribution of funds:\n"+
+                    web3.fromWei(event.returnValues.cashAlice, "ether")
+                    +" Ether - "+web3.fromWei(event.returnValues.cashBob, "ether")+
+                    " Ether");
+                // now alice calls the execute function in MSContract 
+                // to distribute the funds and delete the contract
+                resp = vpc.methods.execute(
+                    aliceAddr,
+                    bobAddr);
+                snd = await resp.send(
+                {   from: aliceAddr,
+                    gas: '2000000',
+                    gasPrice: '1'
+                }).catch((error) => {console.log(error)});
+                called("close_bob", snd.gasUsed);
+
+            } else {
+                console.log("Unknown Event: "+event.event);
+            }
+        } else {
+            console.log(error);
+            process.exit();
+        }
+    });
+
+}
+
+// load web3, this assumes a running geth/parity instance
+const Web3 = require('web3');
+const Personal = require('web3-eth-personal');
+var net = require('net');
+var web3;
+var personal;
+if (typeof web3 !== 'undefined') {
+  web3 = new Web3(web3.currentProvider);
+} else {
+  // set the provider you want from Web3.providers
+  web3 = new Web3(Web3.givenProvider || new Web3.providers.WebsocketProvider("ws://localhost:8545"));
+  var web3 = new Web3('/tmp/geth.ipc', net); // same output as with option below
+}
+const fs = require('fs');
+const exec = require('child_process').execSync;
+var lib = getContract("LibSignatures");
+
+if(typeof lib == 'undefined'){
+    console.log('lib undefined');
+}
+
+var aliceAddr;
+var bobAddr;
+web3.eth.getAccounts(async function(error, result) {
+    if(error != null)
+        console.log("Couldn't get accounts: "+ error);
+    aliceAddr = result[0];
+    bobAddr = result[1];
+    var block = web3.eth.getBlock("latest");
+    console.log('account 1: '+aliceAddr);
+    console.log('account 2: '+bobAddr);
+    gasPrice = web3.utils.toWei("4", "gwei");
+    var timeoutInSec = 15000;
+
+    web3.eth.personal.unlockAccount(aliceAddr, "",timeoutInSec);
+    web3.eth.personal.unlockAccount(bobAddr, "",timeoutInSec);
+
+    await web3.eth.sendTransaction({
+        from: aliceAddr, 
+        to: bobAddr, 
+        value: web3.utils.toWei("10", "ether"), function(err, transactionHash) {
+            if (err)
+                console.log(err);
+        }});
+
+    aliceMoney = await web3.eth.getBalance(aliceAddr);
+    bobMoney = await web3.eth.getBalance(bobAddr);
+
+    
+});
+
+
+
+
