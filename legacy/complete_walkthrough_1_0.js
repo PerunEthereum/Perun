@@ -4,10 +4,11 @@ const abi = require('ethereumjs-abi');
 let gasUsedTotal = 0;
 let functionCalls = [];
 
-async function generateSignatures(args) {
-    let hash = await web3.utils.sha3(args);
-    const sigAlice = await web3.eth.sign(hash,aliceAddr);
-    const sigBob = await web3.eth.sign(hash,bobAddr);
+async function generateSignatures(hash) {
+    const sigAlice = await web3.eth.personal.sign(hash, aliceAddr, "");
+    //web3.eth.sign(hash,aliceAddr);
+    const sigBob = await web3.eth.personal.sign(hash, bobAddr, "");
+    //web3.eth.sign(hash,bobAddr);
     return {
         alice: sigAlice,
         bob: sigBob
@@ -167,8 +168,14 @@ function runSimulation(msc, vpc) {
                 const blockedBob = web3.utils.toWei("10", "ether");
                 const version = 1;
 
-                signatures = await generateSignatures(
-                    [vpc.options.address, sid, blockedAlice, blockedBob, version]);
+                hash = await web3.utils.soliditySha3(
+                    {type: 'address', value: vpc.options.address},
+                    {type: 'uint', value: sid},
+                    {type: 'uint', value: blockedAlice},
+                    {type: 'uint', value: blockedBob},
+                    {type: 'uint', value: version});
+                signatures = await generateSignatures(hash);
+
                 resp = msc.methods.stateRegister(
                     vpc.options.address,
                     sid,
@@ -195,8 +202,13 @@ function runSimulation(msc, vpc) {
                 const blockedBob = web3.utils.toWei("10", "ether");
                 const version = 1;
 
-                signatures = await generateSignatures(
-                    [vpc.options.address, sid, blockedAlice, blockedBob, version]);
+                hash = await web3.utils.soliditySha3(
+                    {type: 'address', value: vpc.options.address},
+                    {type: 'uint', value: sid},
+                    {type: 'uint', value: blockedAlice},
+                    {type: 'uint', value: blockedBob},
+                    {type: 'uint', value: version});
+                signatures = await generateSignatures(hash);
 
                 resp = msc.methods.stateRegister(
                     vpc.options.address,
@@ -227,9 +239,14 @@ function runSimulation(msc, vpc) {
                 const version = 10;
 
                 // id hash as input for next hash
-                const id = await web3.utils.sha3([aliceAddr, bobAddr, sid]);
+                const id = await web3.utils.soliditySha3(aliceAddr, bobAddr, sid);
 
-                signatures = await generateSignatures([version, aliceCash, bobCash]);
+                hash = await web3.utils.soliditySha3(
+                    {type: 'bytes32', value: id},
+                    {type: 'uint', value: version},
+                    {type: 'uint', value: aliceCash},
+                    {type: 'uint', value: bobCash});
+                signatures = await generateSignatures(hash);
                 
                 resp = vpc.methods.close(
                     aliceAddr,
@@ -250,8 +267,13 @@ function runSimulation(msc, vpc) {
             } else if (event.event == "EventClosed") {
                 console.log("Multi state channel closed!");
                 overview();
+                process.exit();
 
-            } else {
+            }else if(event.event == "Event_Data"){
+                console.log("Data: "+event.returnValues.a+
+                    " : "+event.returnValues.data);
+
+            }else {
                 console.log("Unknown Event: "+event.event);
             }
         } else {
@@ -277,9 +299,14 @@ function runSimulation(msc, vpc) {
                 const version = 10;
 
                 // id hash as input for next hash
-                const id = await web3.utils.sha3([aliceAddr, bobAddr, sid]);
+                const id = await web3.utils.soliditySha3(aliceAddr, bobAddr, sid);
                 
-                signatures = await generateSignatures([version, aliceCash, bobCash]);
+                hash = await web3.utils.soliditySha3(
+                    {type: 'bytes32', value: id},
+                    {type: 'uint', value: version},
+                    {type: 'uint', value: aliceCash},
+                    {type: 'uint', value: bobCash});
+                signatures = await generateSignatures(hash);
 
                 resp = vpc.methods.close(
                     aliceAddr,

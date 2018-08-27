@@ -32,14 +32,14 @@ contract VPC {
             bytes signA, bytes signB) public {
         require(msg.sender == alice || msg.sender == bob);
 
-        id = keccak256(alice, bob, sid);
+        id = keccak256(abi.encodePacked(alice, bob, sid));
         s = states[id];
         
         // verfiy signatures
         bytes32 msgHash = keccak256(abi.encodePacked(id, version, aliceCash, bobCash));
         bytes32 gethPrefixHash = keccak256(abi.encodePacked("\u0019Ethereum Signed Message:\n32", msgHash));
-        //require(LibSignatures.verify(alice, gethPrefixHash, signA) 
-          //       && LibSignatures.verify(bob, gethPrefixHash, signB));
+        require(LibSignatures.verify(alice, gethPrefixHash, signA) 
+                 && LibSignatures.verify(bob, gethPrefixHash, signB));
 
         // if such a virtual channel state does not exist yet, create one
         if (!s.init) {

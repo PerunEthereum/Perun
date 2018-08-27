@@ -78,7 +78,6 @@ contract MSContract {
             bob.cash = msg.value;
             bob.waitForInput = false;
         }
-
         // execute if both players responded
         if (!alice.waitForInput && !bob.waitForInput) {
             status = ChannelStatus.Open;
@@ -127,11 +126,11 @@ contract MSContract {
         require(alice.cash >= _blockedA && bob.cash >= _blockedB);
 
         // verfify correctness of the signatures
-        bytes32 msgHash = keccak256(abi.encodePacked(_vpc, _sid, _blockedA, _blockedB, _version));
+        bytes32 msgHash = keccak256(abi.encodePacked(_vpc,_sid, _blockedA, _blockedB, _version));
+        
         bytes32 gethPrefixHash = keccak256(abi.encodePacked("\u0019Ethereum Signed Message:\n32", msgHash));
-
-        //require(LibSignatures.verify(alice.id, gethPrefixHash, sigA)
-          //      && LibSignatures.verify(bob.id, gethPrefixHash, sigB));
+        require(LibSignatures.verify(alice.id, gethPrefixHash, sigA)
+                && LibSignatures.verify(bob.id, gethPrefixHash, sigB));
         
         // execute on first call
         if (status == ChannelStatus.Open || status == ChannelStatus.WaitingToClose) {
@@ -167,6 +166,7 @@ contract MSContract {
             EventStateRegistered(c.blockedA, c.blockedB);
         }
     }
+
 
     /*
     * This function is used in case one of the players did not confirm the state

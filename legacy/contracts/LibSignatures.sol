@@ -25,7 +25,6 @@ library LibSignatures {
 
             if (v != 27 && v != 28)
                 return false;
-
             return _address == ecrecover(_message, v, r, s);
     }
 }
