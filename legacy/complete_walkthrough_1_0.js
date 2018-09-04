@@ -79,13 +79,15 @@ function deployLibSig(){
 
 
 function deployVPC(libAddress) {
-    var vpc = getContract("VPC", libAddress.options.address);
+    var vpc = getContract("VPC");
 
     var contract = new web3.eth.Contract(
         JSON.parse(vpc.abi), 
         {from: aliceAddr, data: vpc.code, gas: '200000000'});
     contract.deploy({
-         data: vpc.code
+         data: vpc.code,
+         arguments: [libAddress.options.address ]
+         
      }).send(
         {   from: aliceAddr,
             gas: '2000000'}
