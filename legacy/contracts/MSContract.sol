@@ -1,6 +1,7 @@
 pragma solidity ^0.4.24;
 
 import "./VPC.sol";
+import "./ILibSignatures.sol";
 
 contract MSContract {
     event EventInitializing(address addressAlice, address addressBob);
@@ -41,11 +42,13 @@ contract MSContract {
     InternalContract public c;
     ChannelStatus public status;
 
+    ILibSignatures libSig;
+
     /*
     * Constructor for setting initial variables takes as input
     * addresses of the parties of the basic channel
     */
-    function MSContract(address _addressAlice, address _addressBob) public {
+    constructor(address _libSig, address _addressAlice, address _addressBob) public {
         // set addresses
         alice.id = _addressAlice;
         bob.id = _addressBob;
@@ -55,10 +58,11 @@ contract MSContract {
         alice.waitForInput = true;
         bob.waitForInput = true;
 
+        libSig = ILibSignatures(_libSig);
         // set other initial values
         status = ChannelStatus.Init;
         c.active = false;
-        EventInitializing(_addressAlice, _addressBob);
+        emit EventInitializing(_addressAlice, _addressBob);
     }
 
     /*
@@ -82,7 +86,7 @@ contract MSContract {
         if (!alice.waitForInput && !bob.waitForInput) {
             status = ChannelStatus.Open;
             timeout = 0;
-            EventInitialized(alice.cash, bob.cash);
+            emit EventInitialized(alice.cash, bob.cash);
         }
     }
 
@@ -99,7 +103,7 @@ contract MSContract {
         if (bob.waitForInput && bob.cash > 0) {
             require(bob.id.send(bob.cash));
         }
-        EventRefunded();
+        emit EventRefunded();
 
         // terminate contract
         selfdestruct(alice.id); 
@@ -129,8 +133,8 @@ contract MSContract {
         bytes32 msgHash = keccak256(abi.encodePacked(_vpc,_sid, _blockedA, _blockedB, _version));
         
         bytes32 gethPrefixHash = keccak256(abi.encodePacked("\u0019Ethereum Signed Message:\n32", msgHash));
-        require(LibSignatures.verify(alice.id, gethPrefixHash, sigA)
-                && LibSignatures.verify(bob.id, gethPrefixHash, sigB));
+        require(libSig.verify(alice.id, gethPrefixHash, sigA)
+                && libSig.verify(bob.id, gethPrefixHash, sigB));
         
         // execute on first call
         if (status == ChannelStatus.Open || status == ChannelStatus.WaitingToClose) {
@@ -138,7 +142,7 @@ contract MSContract {
             alice.waitForInput = true;
             bob.waitForInput = true;
             timeout = now + 100 minutes;
-            EventStateRegistering();
+            emit EventStateRegistering();
         }
         if (status != ChannelStatus.InConflict) return;
 
@@ -163,7 +167,7 @@ contract MSContract {
             bob.waitForInput = false;
             alice.cash -= c.blockedA;
             bob.cash -= c.blockedB;
-            EventStateRegistered(c.blockedA, c.blockedB);
+            emit EventStateRegistered(c.blockedA, c.blockedB);
         }
     }
 
@@ -179,7 +183,7 @@ contract MSContract {
         bob.waitForInput = false;
         alice.cash -= c.blockedA;
         bob.cash -= c.blockedB;
-        EventStateRegistered(c.blockedA, c.blockedB);
+        emit EventStateRegistered(c.blockedA, c.blockedB);
     }
 
     /*
@@ -191,11 +195,11 @@ contract MSContract {
         require(status == ChannelStatus.Settled);
         
         // call virtual payment machine on the params
-        bool s; uint a; uint b;
+        bool v; uint a; uint b;
         VPC cntr = VPC(c.vpc);
-        (s, a, b) = cntr.finalize(_alice, _bob, c.sid);
+        (v, a, b) = cntr.finalize(_alice, _bob, c.sid);
         // check if the result makes sense
-        if (!s) return;
+        if (!v) return;
 
         // update balances only if they make sense
         if (a + b == c.blockedA + c.blockedB) {
@@ -229,7 +233,7 @@ contract MSContract {
             timeout = now + 300 minutes;
             alice.waitForInput = true;
             bob.waitForInput = true;
-            EventClosing();
+            emit EventClosing();
         }
 
         if (status != ChannelStatus.WaitingToClose) return;
@@ -249,7 +253,7 @@ contract MSContract {
 
             // terminate channel
             if (alice.cash == 0 && bob.cash == 0) {
-                EventClosed();
+                emit EventClosed();
                 selfdestruct(alice.id);
             }
         }
@@ -257,7 +261,7 @@ contract MSContract {
 
     function finalizeClose() public AliceOrBob {
         if (status != ChannelStatus.WaitingToClose) {
-            EventNotClosed();
+            emit EventNotClosed();
             return;
         }
 
@@ -269,7 +273,7 @@ contract MSContract {
 
             // terminate channel
             if (alice.cash == 0 && bob.cash == 0) {
-                EventClosed();
+                emit EventClosed();
                 selfdestruct(alice.id);
             }
         }
