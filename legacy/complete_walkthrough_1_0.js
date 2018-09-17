@@ -78,7 +78,7 @@ function deployLibSig(){
                console.log('Contract mined! address: ' + contract.address + 
                 ' transactionHash: ' + contract.transactionHash);
            }
-     }).then(async function(newContractInstance){
+     }).then(function(newContractInstance){
         console.log('Signature library deployed');
         deployVPC(newContractInstance);
     }).catch((error) => {console.log(error)});
@@ -112,7 +112,7 @@ function deployVPC(libAddress) {
                console.log('Contract mined! address: ' + contract.address + 
                 ' transactionHash: ' + contract.transactionHash);
            }
-     }).then(async function(newContractInstance){
+     }).then(function(newContractInstance){
         console.log('VPC deployed at '+ newContractInstance.options.address);
         deployMSContract(libAddress, newContractInstance);
     }).catch((error) => {console.log(error)});
