@@ -15,6 +15,11 @@ async function generateSignatures(hash) {
     };
 }
 
+//Helper function to add a timeout
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
 function called(label, gasUsed){
     gasUsedTotal += gasUsed;
     var priceWEI = gasUsed * gasPrice;
@@ -35,18 +40,12 @@ function overview(){
     console.log("---------");
 }
 
-// XXX: NOTE THIS USES THE OLD web3.js 0.18.0 version, not the 1.0 API
-function getContract(contractName, libAddress) {
-    if (typeof libAddress !== 'undefined') {
-        exec('solc --bin --abi --optimize --overwrite -o build/ --libraries LibSignatures:'+libAddress+' contracts/'+contractName+'.sol');
-    } else {
-        exec('solc --bin --abi --optimize --overwrite -o build/ contracts/'+contractName+'.sol');
-    }
+//Compiles the smart contract
+function getContract(contractName) {
+    exec('solc --bin --abi --optimize --overwrite -o build/ contracts/'+contractName+'.sol');
 
-    // compile library first 
     var code = "0x" + fs.readFileSync("build/" + contractName + ".bin");
     var abi = fs.readFileSync("build/" + contractName + ".abi");
-
     return {
         abi: abi,
         code: code
@@ -58,59 +57,76 @@ function deployLibSig(){
     var contract = new web3.eth.Contract(
         JSON.parse(lib.abi), 
         {from: aliceAddr, data: lib.code, gas: '200000000'});
-    contract.deploy({
+
+    var cntr = contract.deploy({
          data: lib.code
-     }).send(
+    });
+    var estGas = '4000000'
+    cntr.estimateGas(function(err, gas){
+        called("deployCostLibSig", gas);
+        estGas = gas + '20000';
+    });
+
+    cntr.send(
         {   from: aliceAddr,
-            gas: '2000000'}
+            gas: estGas}
         , function (e, contract){
            if(e){
             console.log(e);
            }
            if (typeof contract.address !== 'undefined') {
-               console.log('Contract mined! address: ' + contract.address + ' transactionHash: ' + contract.transactionHash);
-               
+               console.log('Contract mined! address: ' + contract.address + 
+                ' transactionHash: ' + contract.transactionHash);
            }
      }).then(function(newContractInstance){
         console.log('Signature library deployed');
         deployVPC(newContractInstance);
-    });
+    }).catch((error) => {console.log(error)});
 }
 
 
 function deployVPC(libAddress) {
-    var vpc = getContract("VPC", libAddress.options.address);
+    var vpc = getContract("VPC");
 
     var contract = new web3.eth.Contract(
         JSON.parse(vpc.abi), 
         {from: aliceAddr, data: vpc.code, gas: '200000000'});
-    contract.deploy({
-         data: vpc.code
-     }).send(
+
+    var cntr = contract.deploy({
+         data: vpc.code,
+         arguments: [libAddress.options.address]
+    });
+    var estGas = '4000000'
+    cntr.estimateGas(function(err, gas){
+        called("deployCostVPC", gas);
+        estGas = gas + '20000';
+    });
+    cntr.send(
         {   from: aliceAddr,
-            gas: '2000000'}
+            gas: estGas}
         , function (e, contract){
            if(e){
             console.log(e);
            }
            if (typeof contract.address !== 'undefined') {
-               console.log('Contract mined! address: ' + contract.address + ' transactionHash: ' + contract.transactionHash);
+               console.log('Contract mined! address: ' + contract.address + 
+                ' transactionHash: ' + contract.transactionHash);
            }
      }).then(function(newContractInstance){
-        console.log('VPC deployed');
+        console.log('VPC deployed at '+ newContractInstance.options.address);
         deployMSContract(libAddress, newContractInstance);
-    });
+    }).catch((error) => {console.log(error)});
 }
 
 function deployMSContract(libAddress, vpc) {
-    var msc = getContract("MSContract", libAddress.options.address);
+    var msc = getContract("MSContract");
 
     var contract = new web3.eth.Contract(
         JSON.parse(msc.abi), 
         {from: aliceAddr, data: msc.code, gas: '200000000'});
     contract.deploy({
          data: msc.code,
-         arguments: [aliceAddr, bobAddr ]
+         arguments: [libAddress.options.address, aliceAddr, bobAddr ]
      }).send(
         {   from: aliceAddr,
             gas: '2000000'}
@@ -247,7 +263,8 @@ function runSimulation(msc, vpc) {
                     {type: 'uint', value: aliceCash},
                     {type: 'uint', value: bobCash});
                 signatures = await generateSignatures(hash);
-                
+                sleep(100);
+                console.log(vpc.options.address);
                 resp = vpc.methods.close(
                     aliceAddr,
                     bobAddr,
@@ -257,13 +274,14 @@ function runSimulation(msc, vpc) {
                     bobCash,
                     signatures.alice,
                     signatures.bob);
+                console.log(await resp.estimateGas());
+                
                 snd = await resp.send(
                 {   from: aliceAddr,
                     gas: '2000000',
                     gasPrice: '1'
                 }).catch((error) => {console.log(error)});
                 called("close_alice", snd.gasUsed);
-
             } else if (event.event == "EventClosed") {
                 console.log("Multi state channel closed!");
                 overview();
@@ -388,8 +406,8 @@ web3.eth.getAccounts(async function(error, result) {
     gasPrice = web3.utils.toWei("4", "gwei");
     var timeoutInSec = 15000;
 
-    web3.eth.personal.unlockAccount(aliceAddr, "",timeoutInSec);
-    web3.eth.personal.unlockAccount(bobAddr, "",timeoutInSec);
+    await web3.eth.personal.unlockAccount(aliceAddr, "",timeoutInSec);
+    await web3.eth.personal.unlockAccount(bobAddr, "",timeoutInSec);
 
     await web3.eth.sendTransaction({
         from: aliceAddr, 
