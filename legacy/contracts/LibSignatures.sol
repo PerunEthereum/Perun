@@ -28,8 +28,6 @@ contract LibSignatures is ILibSignatures {
         if (v != 27 && v != 28)
             return (false);
 
-        address pk = ecrecover(message, v, r, s);
-
-        return pk == addr;
+        return ecrecover(message, v, r, s) == addr;
     }
 }

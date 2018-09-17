@@ -93,7 +93,7 @@ function deployVPC(libAddress) {
         {from: aliceAddr, data: vpc.code, gas: '200000000'});
 
     var cntr = contract.deploy({
-         data: lib.code,
+         data: vpc.code,
          arguments: [libAddress.options.address]
     });
     var estGas = '4000000'
@@ -274,7 +274,7 @@ function runSimulation(msc, vpc) {
                     bobCash,
                     signatures.alice,
                     signatures.bob);
-                //console.log(await resp.estimateGas());
+                console.log(await resp.estimateGas());
                 
                 snd = await resp.send(
                 {   from: aliceAddr,
@@ -282,7 +282,6 @@ function runSimulation(msc, vpc) {
                     gasPrice: '1'
                 }).catch((error) => {console.log(error)});
                 called("close_alice", snd.gasUsed);
-                overview();
             } else if (event.event == "EventClosed") {
                 console.log("Multi state channel closed!");
                 overview();

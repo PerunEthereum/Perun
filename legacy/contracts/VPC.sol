@@ -1,6 +1,6 @@
 pragma solidity ^0.4.24;
 
-//import "./ILibSignatures.sol";
+import "./ILibSignatures.sol";
 
 contract VPC {
     event EventVpcClosing(bytes32 indexed _id);
@@ -24,11 +24,11 @@ contract VPC {
     VpcState public s;
     bytes32 public id;
     
-    //ILibSignatures public libSig;
+    ILibSignatures public libSig;
     
     constructor(address _libSig) public
     {
-        //libSig = ILibSignatures(_libSig);
+        libSig = ILibSignatures(_libSig);
     }
 
     /*
@@ -37,7 +37,7 @@ contract VPC {
     */
     function close(address alice, address bob, uint sid, uint version, uint aliceCash, uint bobCash,
             bytes signA, bytes signB) public {
-        /*require(msg.sender == alice || msg.sender == bob);
+        require(msg.sender == alice || msg.sender == bob);
         
         id = keccak256(abi.encodePacked(alice, bob, sid));
         s = states[id];
@@ -75,7 +75,7 @@ contract VPC {
             s.open = false;
             emit EventVpcClosed(id, s.AliceCash, s.BobCash);
         }
-        states[id] = s;*/
+        states[id] = s;
     }
 
     /*
