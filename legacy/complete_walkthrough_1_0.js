@@ -274,7 +274,7 @@ function runSimulation(msc, vpc) {
                     bobCash,
                     signatures.alice,
                     signatures.bob);
-                console.log(await resp.estimateGas());
+                //console.log(await resp.estimateGas());
                 
                 snd = await resp.send(
                 {   from: aliceAddr,
@@ -407,8 +407,8 @@ web3.eth.getAccounts(async function(error, result) {
     gasPrice = web3.utils.toWei("4", "gwei");
     var timeoutInSec = 15000;
 
-    web3.eth.personal.unlockAccount(aliceAddr, "",timeoutInSec);
-    web3.eth.personal.unlockAccount(bobAddr, "",timeoutInSec);
+    await web3.eth.personal.unlockAccount(aliceAddr, "",timeoutInSec);
+    await web3.eth.personal.unlockAccount(bobAddr, "",timeoutInSec);
 
     await web3.eth.sendTransaction({
         from: aliceAddr, 
