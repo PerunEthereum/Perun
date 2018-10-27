@@ -200,6 +200,7 @@ function runSimulation(msc, vpc) {
                     version,
                     signatures.alice,
                     signatures.bob);
+
                 snd = await resp.send(
                 {   from: aliceAddr,
                     gas: '2000000',
@@ -408,7 +409,7 @@ web3.eth.getAccounts(async function(error, result) {
 
     await web3.eth.personal.unlockAccount(aliceAddr, "",timeoutInSec);
     await web3.eth.personal.unlockAccount(bobAddr, "",timeoutInSec);
-
+    console.log("Sucessfully unlocked accounts");
     await web3.eth.sendTransaction({
         from: aliceAddr, 
         to: bobAddr, 
@@ -419,7 +420,7 @@ web3.eth.getAccounts(async function(error, result) {
 
     aliceMoney = await web3.eth.getBalance(aliceAddr);
     bobMoney = await web3.eth.getBalance(bobAddr);
-
+    console.log("Sucessfully prefunded account");
     deployLibSig();
 });
 

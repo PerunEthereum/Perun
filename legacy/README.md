@@ -15,20 +15,20 @@ We are currently working on release 0.2 but we do not recomend to use this softw
 Install the necessary packages and make a build directory
 ```
 $ mkdir build
+$ mkdir dataDir
 $ npm install
 ```
 
 Start the geth network with your custom genesis block and connect to it
 ```
 $ geth --identity "MyNodeName" --rpc --rpcport "8545" --rpccorsdomain "*" --datadir "dataDir" --port "30303" --nodiscover --rpcapi "db,eth,net,web3" --networkid 1999 init CustomGenesis.json
-$ geth --identity "MyNodeName" --rpc --rpcport "8545" --rpccorsdomain "*" --datadir "dataDir" --port "30303" --nodiscover --rpcapi "db,eth,net,web3" --networkid 1999 console
+$ geth --identity "MyNodeName" --rpc --rpcport "8545" --rpccorsdomain "*" --datadir "dataDir" --port "30303" --nodiscover --rpcapi "db,eth,net,web3,personal" --ipcpath "/tmp/geth.ipc" --networkid 1999 console
 ```
 In the Console:
 ```
 //Create two new Accounts
-var password = ""; //To use the script as it is, leave this blank
-personal.newAccount("password")
-personal.newAccount("password")
+personal.newAccount("")
+personal.newAccount("")
 //start mining
 miner.setEtherbase(personal.listAccounts[0]) 
 miner.start()
@@ -36,6 +36,9 @@ miner.start()
 //stop after a few blocks and check your balance (you need some ether to run)
 miner.stop()
 balance = web3.fromWei(eth.getBalance(eth.accounts[0]), "ether");
+
+//restart the miner
+miner.start()
 ```
 Run the simulation.
 ```
