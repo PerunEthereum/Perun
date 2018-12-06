@@ -1,6 +1,6 @@
-pragma solidity ^0.4.16;
+pragma solidity ^0.4.24;
 
-import "./LibSignatures.sol";
+import "./ILibSignatures.sol";
 
 contract VPC {
     event EventVpcClosing(bytes32 indexed _id);
@@ -23,6 +23,13 @@ contract VPC {
     mapping (bytes32 => VpcState) public states;
     VpcState public s;
     bytes32 public id;
+    
+    ILibSignatures public libSig;
+    
+    constructor(address _libSig) public
+    {
+        libSig = ILibSignatures(_libSig);
+    }
 
     /*
     * This function is called by any participant of the virtual channel
@@ -31,22 +38,22 @@ contract VPC {
     function close(address alice, address bob, uint sid, uint version, uint aliceCash, uint bobCash,
             bytes signA, bytes signB) public {
         require(msg.sender == alice || msg.sender == bob);
-
-        id = keccak256(alice, bob, sid);
+        
+        id = keccak256(abi.encodePacked(alice, bob, sid));
         s = states[id];
         
         // verfiy signatures
-        bytes32 msgHash = keccak256(id, version, aliceCash, bobCash);
-        bytes32 gethPrefixHash = keccak256("\u0019Ethereum Signed Message:\n32", msgHash);
-        require(LibSignatures.verify(alice, gethPrefixHash, signA) 
-                 && LibSignatures.verify(bob, gethPrefixHash, signB));
+        bytes32 msgHash = keccak256(abi.encodePacked(id, version, aliceCash, bobCash));
+        bytes32 gethPrefixHash = keccak256(abi.encodePacked("\u0019Ethereum Signed Message:\n32", msgHash));
+        require(libSig.verify(alice, gethPrefixHash, signA) 
+                && libSig.verify(bob, gethPrefixHash, signB));
 
         // if such a virtual channel state does not exist yet, create one
         if (!s.init) {
             uint validity = now + 10 minutes;
             uint extendedValidity = validity + 10 minutes;
             s = VpcState(aliceCash, bobCash, version, validity, extendedValidity, true, true, true, true);
-            EventVpcClosing(id);
+            emit EventVpcClosing(id);
         }
 
         // if channel is closed or timeouted do nothing
@@ -66,7 +73,7 @@ contract VPC {
         // execute if both players responded
         if (!s.waitingForAlice && !s.waitingForBob) {
             s.open = false;
-            EventVpcClosed(id, s.AliceCash, s.BobCash);
+            emit EventVpcClosed(id, s.AliceCash, s.BobCash);
         }
         states[id] = s;
     }
@@ -76,12 +83,12 @@ contract VPC {
     *   returns (false, 0, 0) if such a channel does not exist or is neither closed nor timeouted, or
     *   return (true, a, b) otherwise, where (a, b) is a final distribution of funds in this channel
     */
-    function finalize(address alice, address bob, uint sid) public returns (bool, uint, uint) {
-        id = keccak256(alice, bob, sid);
+    function finalize(address alice, address bob, uint sid) public returns (bool v, uint a, uint b) {
+        id = keccak256(abi.encodePacked(alice, bob, sid));
         if (states[id].init) {
             if (states[id].extendedValidity < now) {
                 states[id].open = false;
-                EventVpcClosed(id, states[id].AliceCash, states[id].BobCash);
+                emit EventVpcClosed(id, states[id].AliceCash, states[id].BobCash);
             }
             if (states[id].open)
                 return (false, 0, 0);
